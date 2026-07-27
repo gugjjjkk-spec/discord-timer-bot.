@@ -315,3 +315,9 @@ function playAlarmSound(connection) {
 }
 
 client.login(process.env.DISCORD_TOKEN);
+const http = require('http');
+http.createServer((req, res) => {
+  res.write("Bot is alive!");
+  res.end();
+}).listen(process.env.PORT || 8080);
+
