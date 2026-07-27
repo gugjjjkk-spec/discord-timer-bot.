@@ -1,3 +1,5 @@
+const http = require('http');
+http.createServer((req, res) => res.end("Bot is online!")).listen(process.env.PORT || 8080);
 const { 
     Client, 
     GatewayIntentBits, 
