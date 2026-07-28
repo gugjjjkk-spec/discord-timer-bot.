@@ -1,5 +1,3 @@
-const http = require('http');
-http.createServer((req, res) => res.end("Bot is online!")).listen(process.env.PORT || 8080);
 const { 
     Client, 
     GatewayIntentBits, 
@@ -40,7 +38,7 @@ client.once('ready', () => {
     console.log(`🤖 البوت شغال وجاهز باسم: ${client.user.tag}`);
 });
 
-// 1. أمر !setsound لحفظ ملف الصوت فقط عند طلب ذلك
+// 1. أمر !setsound لحفظ ملف الصوت وأمر !setup لتشغيل اللوحة
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
 
@@ -69,7 +67,6 @@ client.on('messageCreate', async (message) => {
 
     // أمر !setup لتشغيل لوحة التحكم
     if (message.content.trim() === '!setup') {
-        // التحقق من رتبة Timer Admin
         const hasRole = message.member.roles.cache.some(r => r.name === 'Timer Admin');
         if (!hasRole) {
             return message.reply('❌ عفواً، هذا الأمر مخصص فقط لمن يحملون رتبة `Timer Admin`.');
@@ -92,7 +89,6 @@ client.on('messageCreate', async (message) => {
 
 // 2. التفاعل مع الأزرار والـ Modals
 client.on('interactionCreate', async (interaction) => {
-    // التحقق من الرتبة في التفاعلات
     if (interaction.isButton() || interaction.isModalSubmit()) {
         const hasRole = interaction.member.roles.cache.some(r => r.name === 'Timer Admin');
         if (!hasRole) {
@@ -170,7 +166,6 @@ async function startTimerSession(interaction, minutes) {
     let secondsLeft = totalSeconds;
     const originalChannelName = voiceChannel.name;
 
-    // الاتصال بالروم الصوتي
     const connection = joinVoiceChannel({
         channelId: voiceChannel.id,
         guildId: voiceChannel.guild.id,
@@ -181,7 +176,6 @@ async function startTimerSession(interaction, minutes) {
         content: generateStatusMessage(secondsLeft, totalSeconds)
     });
 
-    // تحديث اسم الروم في البداية
     safeSetChannelName(voiceChannel, `${originalChannelName} | ⏳ ${formatTime(secondsLeft)}`);
 
     let lastChannelRename = Date.now();
@@ -190,27 +184,21 @@ async function startTimerSession(interaction, minutes) {
         secondsLeft -= 5;
 
         if (secondsLeft > 0) {
-            // تحديث نص الرسالة كل 5 ثواني
             await statusMessage.edit({
                 content: generateStatusMessage(secondsLeft, totalSeconds)
             }).catch(() => {});
 
-            // تحديث اسم الروم الصوتي آمن كل 3 دقائق تفادياً للـ Rate Limit
             if (Date.now() - lastChannelRename >= 3 * 60 * 1000) {
                 safeSetChannelName(voiceChannel, `${originalChannelName} | ⏳ ${formatTime(secondsLeft)}`);
                 lastChannelRename = Date.now();
             }
         } else {
-            // انتهى الوقت!
             clearInterval(intervalId);
 
-            // تشغيل صوت الإنذار
             playAlarmSound(connection);
 
-            // استرجاع الاسم الأصلي للروم
             safeSetChannelName(voiceChannel, originalChannelName);
 
-            // إحصائيات الجلسة
             const members = voiceChannel.members.filter(m => !m.user.bot);
             const memberMentions = members.map(m => m.toString()).join(', ') || 'لا يوجد أبطال في الروم';
 
@@ -229,7 +217,6 @@ async function startTimerSession(interaction, minutes) {
                 components: []
             }).catch(() => {});
 
-            // فصل البوت وحذف التايمر بعد فترة قصيرة من إنتهاء الصوت
             setTimeout(() => {
                 if (connection) connection.destroy();
                 activeTimers.delete(guildId);
@@ -245,17 +232,14 @@ async function startTimerSession(interaction, minutes) {
     });
 }
 
-// دالة إيقاف التايمر يدويًا (إلغاء)
 function stopTimer(guildId, reason) {
     const timerData = activeTimers.get(guildId);
     if (!timerData) return;
 
     clearInterval(timerData.intervalId);
 
-    // إرجاع الاسم الأصلي للروم
     safeSetChannelName(timerData.voiceChannel, timerData.originalChannelName);
 
-    // فصل البوت
     if (timerData.connection) {
         timerData.connection.destroy();
     }
@@ -263,7 +247,6 @@ function stopTimer(guildId, reason) {
     activeTimers.delete(guildId);
 }
 
-// دالة آمنة لتغيير اسم الروم تفادياً للـ Rate Limits
 async function safeSetChannelName(channel, name) {
     try {
         await channel.setName(name);
@@ -272,7 +255,6 @@ async function safeSetChannelName(channel, name) {
     }
 }
 
-// توليد شريط التقدم Visual Progress Bar
 function generateProgressBar(secondsLeft, totalSeconds) {
     const totalBlocks = 10;
     const percentage = Math.max(0, Math.min(100, Math.round(((totalSeconds - secondsLeft) / totalSeconds) * 100)));
@@ -283,21 +265,18 @@ function generateProgressBar(secondsLeft, totalSeconds) {
     return `[${bar}] **${percentage}%**`;
 }
 
-// توليد نص الرسالة كاملاً
 function generateStatusMessage(secondsLeft, totalSeconds) {
     const progress = generateProgressBar(secondsLeft, totalSeconds);
     const timeStr = formatTime(secondsLeft);
     return `⏳ **جلسة المذاكرة شغالة...**\nالوقت المتبقي: **${timeStr}** 📚\nالتقدم: ${progress}`;
 }
 
-// تنسيق الوقت (MM:SS)
 function formatTime(seconds) {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-// تشغيل الصوت
 function playAlarmSound(connection) {
     if (!connection) return;
     try {
@@ -317,9 +296,3 @@ function playAlarmSound(connection) {
 }
 
 client.login(process.env.DISCORD_TOKEN);
-const http = require('http');
-http.createServer((req, res) => {
-  res.write("Bot is alive!");
-  res.end();
-}).listen(process.env.PORT || 8080);
-
